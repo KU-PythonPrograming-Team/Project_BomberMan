@@ -1,129 +1,159 @@
-import pygame #파이썬에서 2D게임 개발할 때 가장 많이 쓰는 라이브러리
+import pygame  # 파이썬에서 2D 게임 개발할 때 가장 많이 쓰는 라이브러리
 
+pygame.init()
 
-#BoomberMan
 class Game:
-  def __init__(self):
-      # 초기화 코드
-      pass
+    def __init__(self):
+        self.screen = pygame.display.set_mode((800, 600))
+        pygame.display.set_caption("Bomberman Game")
+        self.clock = pygame.time.Clock()
+        self.player = Player(50, 50, 5)  # 플레이어 초기 위치와 속도 설정
+        self.running = True
 
-  def start(self):
-      # 게임 시작
-      pass
+    def start(self):
+        while self.running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
 
-  def update(self):
-      # 게임 상태 업데이트
-      pass
+            self.handle_key_input()  # 키 입력 처리 메서드 호출
+            self.update()
+            pygame.display.flip()
+            self.clock.tick(60)  # FPS 설정
 
-  def check_win_condition(self):
-      # 승리 조건 확인
-      pass
+    def handle_key_input(self):
+        """키 입력을 처리하는 메서드"""
+        keys = pygame.key.get_pressed()
+
+        # 플레이어 이동 처리
+        if keys[pygame.K_LEFT]:
+            self.player.move('left')
+        if keys[pygame.K_RIGHT]:
+            self.player.move('right')
+        if keys[pygame.K_UP]:
+            self.player.move('up')
+        if keys[pygame.K_DOWN]:
+            self.player.move('down')
+
+        # 스페이스바로 폭탄 설치
+        if keys[pygame.K_SPACE]:
+            self.player.place_bomb()
+
+    def update(self):
+        """게임 상태를 업데이트하고 화면에 그립니다."""
+        self.screen.fill((0, 0, 0))  # 화면 초기화 (검정색 배경)
+        self.screen.blit(self.player.image, (self.player.x, self.player.y))  # 플레이어 그리기
+
+    def check_win_condition(self):
+        pass
+
+    def quit(self):
+        pygame.quit()
 
 class Player:
-  def __init__(self, x, y, speed):
-      self.x = x  # 플레이어의 x 좌표
-      self.y = y  # 플레이어의 y 좌표
-      self.lives = 3  # 설정 가능하도록
-      self.bombs = 1  # 아이템에 따라 증가하도록
-      self.speed = speed
-      self.bombs = [] # 왜 여기두지
-      self.image = pygame.Surface((50, 50))
-      self.image.fill((0, 0, 255))  # 생성한 Surface(플레이어)를 파란색으로 채움
-      
-    
-      # 기타 플레이어 속성
-  
-  # 이동 처리
-  def move(self, direction):
-    match direction:
-      case 'left':
-        self.x -= self.speed
-      case 'right':
-        self.x += self.speed
-      case 'up':
-        self.y -= self.speed
-      case 'down':
-        self.y += self.speed
-      case _:
-        pass  # 기본값: 방향이 유효하지 않을 때 아무것도 하지 않음
+    def __init__(self, x, y, speed):
+        self.x = x  # 플레이어의 x 좌표
+        self.y = y  # 플레이어의 y 좌표
+        self.lives = 3  # 플레이어의 생명
+        self.speed = speed  # 플레이어의 이동 속도
+        self.image = pygame.Surface((50, 50))
+        self.image.fill((0, 0, 255))  # 생성한 Surface(플레이어)를 파란색으로 채움
+        self.bombs = []  # 플레이어가 설치한 폭탄을 관리
+        self.bombs_count = 1  # 플레이어가 설치할 수 있는 폭탄 개수
 
-  
-    
-  def place_bomb(self):
-    bomb = bombs(self.x, self.y)
-    self.bombs.append(bomb)
+    def move(self, direction):
+        match direction:
+            case 'left':
+                self.x -= self.speed
+            case 'right':
+                self.x += self.speed
+            case 'up':
+                self.y -= self.speed
+            case 'down':
+                self.y += self.speed
+            case _:
+                pass
 
-  def die(self):
-      # 사망 처리
-      pass
+    def place_bomb(self):
+        if len(self.bombs) < self.bombs_count:  # 설치할 수 있는 폭탄 개수 제한
+            bomb = Bomb(self.x, self.y, timer=3)
+            self.bombs.append(bomb)
+            print(f"Bomb placed at ({self.x}, {self.y})")  # 콘솔에 폭탄 설치 위치 출력
 
-class Enemy:
-  def __init__(self, x, y):
-      self.x = x
-      self.y = y
-      # 기타 적 속성
-
-  def move(self):
-      # 적 이동 처리
-      pass
-
-  def die(self):
-      # 적 사망 처리
-      pass
+    def die(self):
+        # 사망 처리
+        pass
 
 class Bomb:
-  def __init__(self, x, y, timer):
-      self.x = x
-      self.y = y
-      self.timer = 3 #폭탄 타이머 = (3)초
-      self.image = pygame.Surface((30, 30))
-      self.image.fill((255, 0, 0))  # 빨간색 폭탄
+    def __init__(self, x, y, timer):
+        self.x = x
+        self.y = y
+        self.timer = timer  # 폭탄 타이머 (초)
+        self.image = pygame.Surface((30, 30))
+        self.image.fill((255, 0, 0))  # 빨간색 폭탄
 
-  def update(self):
-      # 폭탄 타이머 업데이트
-      pass
+    def update(self):
+        # 폭탄 타이머 업데이트
+        pass
 
-  def explode(self):
-      # 폭발 처리
-      pass
-    
+    def explode(self):
+        # 폭발 처리
+        pass
+
 class Wall:
-  def __init__(self, x, y, destructible):
-      self.x = x
-      self.y = y
-      self.destructible = destructible
-      # 기타 벽 속성
+    def __init__(self, x, y, destructible):
+        self.x = x
+        self.y = y
+        self.destructible = destructible
 
 class Item:
-  def __init__(self, x, y, type):
-      self.x = x
-      self.y = y
-      self.type = type
+    def __init__(self, x, y, type):
+        self.x = x
+        self.y = y
+        self.type = type
 
-  def apply_effect(self, player):
-      # 아이템 효과 적용
-      pass
+    def apply_effect(self, player):
+        # 아이템 효과 적용
+        pass
 
 class Board:
-  def __init__(self, width, height):
-      self.width = width
-      self.height = height
-      self.grid = [[None for _ in range(width)] for _ in range(height)]
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+        self.grid = [[None for _ in range(width)] for _ in range(height)]
 
-  def place_element(self, element, x, y):
-      # 보드에 요소 배치ㅈ
-      pass
+    def place_element(self, element, x, y):
+        # 보드에 요소 배치
+        pass
 
-  def remove_element(self, x, y):
-      # 보드에서 요소 제거
-      pass
+    def remove_element(self, x, y):
+        # 보드에서 요소 제거
+        pass
 
 class Explosion:
-  def __init__(self, x, y, radius):
-      self.x = x
-      self.y = y
-      self.radius = radius
+    def __init__(self, x, y, radius):
+        self.x = x
+        self.y = y
+        self.radius = radius
 
-  def affect_elements(self):
-      # 폭발 효과 처리
-      pass
+    def affect_elements(self):
+        # 폭발 효과 처리
+        pass
+
+class Enemy:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def move(self):
+        # 적 이동 처리
+        pass
+
+    def die(self):
+        # 적 사망 처리
+        pass
+
+# 게임 실행
+game = Game()
+game.start()
+game.quit()
