@@ -1,4 +1,5 @@
 import pygame
+import random
 
 pygame.init()
 
@@ -14,12 +15,12 @@ class Game:
         self.create_walls()  # 게임 시작 시 벽 생성
 
     def create_walls(self):
-        # Example wall positions (you can add more as needed)
-        self.walls.append(Wall(200, 200, destructible=False))
-        self.walls.append(Wall(300, 200, destructible=False))
-        self.walls.append(Wall(200, 300, destructible=False))
-        self.walls.append(Wall(300, 300, destructible=True))  # 파괴 가능한 벽
-
+        # 벽을 랜덤으로 생성
+        for _ in range(10):  # 10개의 벽을 랜덤 위치에 생성
+            x = random.randint(0, 15) * 50  # 0~15까지의 랜덤 x 위치
+            y = random.randint(0, 11) * 50  # 0~11까지의 랜덤 y 위치
+            destructible = random.choice([True, False])  # 파괴 가능성 랜덤 설정
+            self.walls.append(Wall(x, y, destructible))
 
     def start(self):
         while self.running:
@@ -67,7 +68,7 @@ class Game:
         for bomb in self.bombs[:]:  # 원본 리스트를 복사하여 반복
             bomb.update()  # 폭탄 상태 업데이트
             if bomb.timer <= 0:  # 타이머가 0 이하일 때 폭발
-                bomb.explode()  # 폭발 처리
+                bomb.explode(self.walls)  # 폭발 처리
                 self.bombs.remove(bomb)  # 폭탄 리스트에서 제거
 
     def quit(self):
@@ -105,7 +106,6 @@ class Player:
             if 0 <= new_y <= 600 - 50:  # 화면의 위쪽과 아래쪽 경계
                 self.y = new_y  # 충돌이 없을 경우 위치 업데이트
 
-
     def check_collision(self, new_x, new_y, walls):
         player_rect = pygame.Rect(new_x, new_y, 50, 50)  # 플레이어 충돌 범위 이미지
         for wall in walls:
@@ -133,9 +133,32 @@ class Bomb:  # 폭탄 클래스 시작
         if self.timer > 0:
             self.timer -= 1 / 60  # 프레임마다 1/60초 감소
 
-    def explode(self):
+    def explode(self, walls):
         print(f"Bomb at ({self.x}, {self.y}) exploded!")  # 폭발 위치를 화면에 출력
-        # 여기에 폭발 효과 추후 추가 가능
+        # 폭발 범위를 처리
+        self.handle_explosion(walls)
+
+    def handle_explosion(self, walls):
+        """폭발 범위를 처리하는 메서드"""
+        # 폭발 효과를 십자 형태로 구현
+        explosion_radius = 1  # 폭발 반경 (1칸)
+        self.destroy_walls(self.x, self.y, walls)  # 중앙 폭발
+        for i in range(1, explosion_radius + 1):
+            # 왼쪽 폭발
+            self.destroy_walls(self.x - i * 50, self.y, walls)
+            # 오른쪽 폭발
+            self.destroy_walls(self.x + i * 50, self.y, walls)
+            # 위쪽 폭발
+            self.destroy_walls(self.x, self.y - i * 50, walls)
+            # 아래쪽 폭발
+            self.destroy_walls(self.x, self.y + i * 50, walls)
+
+    def destroy_walls(self, x, y, walls):
+        """주어진 좌표의 벽을 파괴하는 메서드"""
+        for wall in walls:
+            if wall.x == x and wall.y == y and wall.destructible:  # 벽이 파괴 가능하면
+                walls.remove(wall)  # 벽 제거
+                print(f"Wall at ({x}, {y}) destroyed!")  # 제거된 벽 출력
 
     def draw(self, screen):
         # 폭탄 그리기
