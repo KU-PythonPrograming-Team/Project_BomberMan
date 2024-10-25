@@ -1,4 +1,4 @@
-import pygame  # 파이썬에서 2D 게임 개발할 때 가장 많이 쓰는 라이브러리
+import pygame
 
 pygame.init()
 
@@ -7,8 +7,19 @@ class Game:
         self.screen = pygame.display.set_mode((800, 600))
         pygame.display.set_caption("Bomberman Game")
         self.clock = pygame.time.Clock()
-        self.player = Player(50, 50, 5)  # 플레이어 초기 위치와 속도 설정
+        self.player = Player(50, 50, 5)
+        self.bombs = []
+        self.walls = []  # 벽 객체 저장
         self.running = True
+        self.create_walls()  # 게임 시작 시 벽 생성
+
+    def create_walls(self):
+        # Example wall positions (you can add more as needed)
+        self.walls.append(Wall(200, 200, destructible=False))
+        self.walls.append(Wall(300, 200, destructible=False))
+        self.walls.append(Wall(200, 300, destructible=False))
+        self.walls.append(Wall(300, 300, destructible=True))  # 파괴 가능한 벽
+
 
     def start(self):
         while self.running:
@@ -16,10 +27,11 @@ class Game:
                 if event.type == pygame.QUIT:
                     self.running = False
 
-            self.handle_key_input()  # 키 입력 처리 메서드 호출
+            self.handle_key_input()
             self.update()
+            self.update_bombs()
             pygame.display.flip()
-            self.clock.tick(60)  # FPS 설정
+            self.clock.tick(60)
 
     def handle_key_input(self):
         """키 입력을 처리하는 메서드"""
@@ -27,84 +39,124 @@ class Game:
 
         # 플레이어 이동 처리
         if keys[pygame.K_LEFT]:
-            self.player.move('left')
+            self.player.move('left', self.walls)
         if keys[pygame.K_RIGHT]:
-            self.player.move('right')
+            self.player.move('right', self.walls)
         if keys[pygame.K_UP]:
-            self.player.move('up')
+            self.player.move('up', self.walls)
         if keys[pygame.K_DOWN]:
-            self.player.move('down')
+            self.player.move('down', self.walls)
 
         # 스페이스바로 폭탄 설치
         if keys[pygame.K_SPACE]:
-            self.player.place_bomb()
+            self.player.place_bomb(self.bombs)
 
     def update(self):
-        """게임 상태를 업데이트하고 화면에 그립니다."""
-        self.screen.fill((0, 0, 0))  # 화면 초기화 (검정색 배경)
-        self.screen.blit(self.player.image, (self.player.x, self.player.y))  # 플레이어 그리기
+        self.screen.fill((0, 0, 0))
+        self.screen.blit(self.player.image, (self.player.x, self.player.y))
 
-    def check_win_condition(self):
-        pass
+        # 벽 이미지 draw
+        for wall in self.walls:
+            wall.draw(self.screen)
+
+        for bomb in self.bombs:
+            bomb.draw(self.screen)
+
+    def update_bombs(self):
+        """폭탄 상태를 업데이트하고 폭발 여부를 확인합니다."""
+        for bomb in self.bombs[:]:  # 원본 리스트를 복사하여 반복
+            bomb.update()  # 폭탄 상태 업데이트
+            if bomb.timer <= 0:  # 타이머가 0 이하일 때 폭발
+                bomb.explode()  # 폭발 처리
+                self.bombs.remove(bomb)  # 폭탄 리스트에서 제거
 
     def quit(self):
         pygame.quit()
 
 class Player:
     def __init__(self, x, y, speed):
-        self.x = x  # 플레이어의 x 좌표
-        self.y = y  # 플레이어의 y 좌표
-        self.lives = 3  # 플레이어의 생명
-        self.speed = speed  # 플레이어의 이동 속도
+        self.x = x
+        self.y = y
+        self.lives = 3
+        self.speed = speed
         self.image = pygame.Surface((50, 50))
-        self.image.fill((0, 0, 255))  # 생성한 Surface(플레이어)를 파란색으로 채움
-        self.bombs = []  # 플레이어가 설치한 폭탄을 관리
-        self.bombs_count = 1  # 플레이어가 설치할 수 있는 폭탄 개수
+        self.image.fill((0, 0, 255))
+        self.bombs_count = 1
 
-    def move(self, direction):
+    def move(self, direction, walls):
+        new_x, new_y = self.x, self.y  # 새 위치 저장
+
         match direction:
             case 'left':
-                self.x -= self.speed
+                new_x -= self.speed
             case 'right':
-                self.x += self.speed
+                new_x += self.speed
             case 'up':
-                self.y -= self.speed
+                new_y -= self.speed
             case 'down':
-                self.y += self.speed
+                new_y += self.speed
             case _:
-                pass
+                return  # 움직이지 않을 때
 
-    def place_bomb(self):
-        if len(self.bombs) < self.bombs_count:  # 설치할 수 있는 폭탄 개수 제한
-            bomb = Bomb(self.x, self.y, timer=3)
-            self.bombs.append(bomb)
+        # 벽과 충돌할 때
+        if not self.check_collision(new_x, new_y, walls):
+            if 0 <= new_x <= 800 - 50:  # 화면의 왼쪽과 오른쪽 경계
+                self.x = new_x
+            if 0 <= new_y <= 600 - 50:  # 화면의 위쪽과 아래쪽 경계
+                self.y = new_y  # 충돌이 없을 경우 위치 업데이트
+
+
+    def check_collision(self, new_x, new_y, walls):
+        player_rect = pygame.Rect(new_x, new_y, 50, 50)  # 플레이어 충돌 범위 이미지
+        for wall in walls:
+            wall_rect = pygame.Rect(wall.x, wall.y, 50, 50)  # 벽 충돌 범위 이미지
+            if player_rect.colliderect(wall_rect):
+                return True  # 충돌감지
+        return False  # 충돌 x
+
+    def place_bomb(self, bombs):
+        if len(bombs) < self.bombs_count:  # 설치할 수 있는 폭탄 개수 제한
+            bomb = Bomb(self.x, self.y, timer=3)  # 3초 타이머로 폭탄 생성
+            bombs.append(bomb)
             print(f"Bomb placed at ({self.x}, {self.y})")  # 콘솔에 폭탄 설치 위치 출력
 
-    def die(self):
-        # 사망 처리
-        pass
-
-class Bomb:
+class Bomb:  # 폭탄 클래스 시작
     def __init__(self, x, y, timer):
         self.x = x
         self.y = y
         self.timer = timer  # 폭탄 타이머 (초)
         self.image = pygame.Surface((30, 30))
         self.image.fill((255, 0, 0))  # 빨간색 폭탄
+        self.font = pygame.font.Font(None, 36)  # 폰트 설정
 
     def update(self):
-        # 폭탄 타이머 업데이트
-        pass
+        if self.timer > 0:
+            self.timer -= 1 / 60  # 프레임마다 1/60초 감소
 
     def explode(self):
-        # 폭발 처리
-        pass
+        print(f"Bomb at ({self.x}, {self.y}) exploded!")  # 폭발 위치를 화면에 출력
+        # 여기에 폭발 효과 추후 추가 가능
+
+    def draw(self, screen):
+        # 폭탄 그리기
+        screen.blit(self.image, (self.x, self.y))
+
+        # 타이머 텍스트
+        if self.timer > 0:
+            timer_text = self.font.render(str(int(self.timer)), True, (255, 255, 255))  # 흰색 텍스트
+            text_rect = timer_text.get_rect(center=(self.x + 15, self.y + 15))  # 폭탄 중앙에 텍스트 위치
+            screen.blit(timer_text, text_rect)  # 화면에 타이머 텍스트 그리기
 
 class Wall:
     def __init__(self, x, y, destructible):
         self.x = x
         self.y = y
         self.destructible = destructible
+        self.image = pygame.Surface((50, 50))  # 벽 크지조정
+        self.image.fill((139, 69, 19))  # 벽 색상 / (139,69,19) : 갈색
+
+    def draw(self, screen):
+        screen.blit(self.image, (self.x, self.y))
 
 class Item:
     def __init__(self, x, y, type):
