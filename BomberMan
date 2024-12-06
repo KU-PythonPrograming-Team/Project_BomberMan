@@ -1,29 +1,38 @@
 import pygame
 import random
+import time
 
 pygame.init()
 
 class Game:
-    def __init__(self):
+    def __init__(self, map_data, time_limit):
         self.screen = pygame.display.set_mode((800, 600))
         pygame.display.set_caption("Bomberman Game")
         self.clock = pygame.time.Clock()
-        self.player = Player(50, 50, 5)
+        self.player = None
         self.bombs = []
-        self.walls = []  # 벽 객체 저장
+        self.walls = []
+        self.explosions = []
         self.running = True
-        self.create_walls()  # 게임 시작 시 벽 생성
+        self.time_limit = time_limit
+        self.start_time = time.time()
+        self.game_over = False
+        self.map_data = map_data
+        self.create_map()  # 맵 데이터로 초기화
 
-    def create_walls(self):
-        # 벽을 랜덤으로 생성
-        for _ in range(10):  # 10개의 벽을 랜덤 위치에 생성
-            x = random.randint(0, 15) * 50  # 0~15까지의 랜덤 x 위치
-            y = random.randint(0, 11) * 50  # 0~11까지의 랜덤 y 위치
-            destructible = random.choice([True, False])  # 파괴 가능성 랜덤 설정
-            self.walls.append(Wall(x, y, destructible))
+    def create_map(self):
+        for row_index, row in enumerate(self.map_data):
+            for col_index, cell in enumerate(row):
+                x, y = col_index * 50, row_index * 50
+                if cell == 1:  # 파괴 불가능한 벽
+                    self.walls.append(Wall(x, y, destructible=False))
+                elif cell == 2:  # 파괴 가능한 벽
+                    self.walls.append(Wall(x, y, destructible=True))
+                elif cell == 3:  # 플레이어
+                    self.player = Player(x, y, speed=5)
 
     def start(self):
-        while self.running:
+        while self.running and not self.game_over:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
@@ -31,14 +40,14 @@ class Game:
             self.handle_key_input()
             self.update()
             self.update_bombs()
+            self.check_time_limit()
             pygame.display.flip()
             self.clock.tick(60)
 
-    def handle_key_input(self):
-        """키 입력을 처리하는 메서드"""
-        keys = pygame.key.get_pressed()
+        self.quit()
 
-        # 플레이어 이동 처리
+    def handle_key_input(self):
+        keys = pygame.key.get_pressed()
         if keys[pygame.K_LEFT]:
             self.player.move('left', self.walls)
         if keys[pygame.K_RIGHT]:
@@ -47,29 +56,50 @@ class Game:
             self.player.move('up', self.walls)
         if keys[pygame.K_DOWN]:
             self.player.move('down', self.walls)
-
-        # 스페이스바로 폭탄 설치
         if keys[pygame.K_SPACE]:
             self.player.place_bomb(self.bombs)
 
     def update(self):
         self.screen.fill((0, 0, 0))
         self.screen.blit(self.player.image, (self.player.x, self.player.y))
-
-        # 벽 이미지 draw
         for wall in self.walls:
             wall.draw(self.screen)
-
         for bomb in self.bombs:
             bomb.draw(self.screen)
+        self.update_explosions()
 
     def update_bombs(self):
-        """폭탄 상태를 업데이트하고 폭발 여부를 확인합니다."""
-        for bomb in self.bombs[:]:  # 원본 리스트를 복사하여 반복
-            bomb.update()  # 폭탄 상태 업데이트
-            if bomb.timer <= 0:  # 타이머가 0 이하일 때 폭발
-                bomb.explode(self.walls)  # 폭발 처리
-                self.bombs.remove(bomb)  # 폭탄 리스트에서 제거
+        for bomb in self.bombs[:]:
+            bomb.update()
+            if bomb.timer <= 0:
+                bomb.explode(self.walls, self.explosions)
+                self.bombs.remove(bomb)
+                self.check_all_blocks_destroyed()
+
+    def update_explosions(self):
+        for explosion in self.explosions[:]:
+            explosion.update()
+            explosion.draw(self.screen)
+            if explosion.is_finished():
+                self.explosions.remove(explosion)
+
+    def check_all_blocks_destroyed(self):
+        if all(not wall.destructible for wall in self.walls):
+            print("All destructible blocks have been destroyed!")
+            self.end_game(victory=True)
+
+    def check_time_limit(self):
+        current_time = time.time()
+        if current_time - self.start_time >= self.time_limit:
+            print("Time's up!")
+            self.end_game()
+
+    def end_game(self, victory=False):
+        self.game_over = True
+        if victory:
+            print("Congratulations! You've won the game!")
+        else:
+            print("Game Over! Better luck next time.")
 
     def quit(self):
         pygame.quit()
@@ -85,162 +115,107 @@ class Player:
         self.bombs_count = 1
 
     def move(self, direction, walls):
-        new_x, new_y = self.x, self.y  # 새 위치 저장
-
-        match direction:
-            case 'left':
-                new_x -= self.speed
-            case 'right':
-                new_x += self.speed
-            case 'up':
-                new_y -= self.speed
-            case 'down':
-                new_y += self.speed
-            case _:
-                return  # 움직이지 않을 때
-
-        # 벽과 충돌할 때
+        new_x, new_y = self.x, self.y
+        if direction == 'left': new_x -= self.speed
+        if direction == 'right': new_x += self.speed
+        if direction == 'up': new_y -= self.speed
+        if direction == 'down': new_y += self.speed
         if not self.check_collision(new_x, new_y, walls):
-            if 0 <= new_x <= 800 - 50:  # 화면의 왼쪽과 오른쪽 경계
-                self.x = new_x
-            if 0 <= new_y <= 600 - 50:  # 화면의 위쪽과 아래쪽 경계
-                self.y = new_y  # 충돌이 없을 경우 위치 업데이트
+            self.x, self.y = max(0, min(750, new_x)), max(0, min(550, new_y))
 
     def check_collision(self, new_x, new_y, walls):
-        player_rect = pygame.Rect(new_x, new_y, 50, 50)  # 플레이어 충돌 범위 이미지
+        player_rect = pygame.Rect(new_x, new_y, 50, 50)
         for wall in walls:
-            wall_rect = pygame.Rect(wall.x, wall.y, 50, 50)  # 벽 충돌 범위 이미지
-            if player_rect.colliderect(wall_rect):
-                return True  # 충돌감지
-        return False  # 충돌 x
+            if player_rect.colliderect(pygame.Rect(wall.x, wall.y, 50, 50)):
+                return True
+        return False
 
     def place_bomb(self, bombs):
-        if len(bombs) < self.bombs_count:  # 설치할 수 있는 폭탄 개수 제한
-            bomb = Bomb(self.x, self.y, timer=3)  # 3초 타이머로 폭탄 생성
-            bombs.append(bomb)
-            print(f"Bomb placed at ({self.x}, {self.y})")  # 콘솔에 폭탄 설치 위치 출력
+        if len(bombs) < self.bombs_count:
+            bombs.append(Bomb(self.x, self.y, timer=3))
+            print(f"Bomb placed at ({self.x}, {self.y})")
 
-class Bomb:  # 폭탄 클래스 시작
+class Bomb:
     def __init__(self, x, y, timer):
         self.x = x
         self.y = y
-        self.timer = timer  # 폭탄 타이머 (초)
+        self.timer = timer
         self.image = pygame.Surface((30, 30))
-        self.image.fill((255, 0, 0))  # 빨간색 폭탄
-        self.font = pygame.font.Font(None, 36)  # 폰트 설정
+        self.image.fill((255, 0, 0))
+        self.font = pygame.font.Font(None, 36)
 
     def update(self):
         if self.timer > 0:
-            self.timer -= 1 / 60  # 프레임마다 1/60초 감소
+            self.timer -= 1 / 60
 
-    def explode(self, walls):
-        print(f"Bomb at ({self.x}, {self.y}) exploded!")  # 폭발 위치를 화면에 출력
-        # 폭발 범위를 처리
+    def explode(self, walls, explosions):
+        print(f"Bomb at ({self.x}, {self.y}) exploded!")
+        explosions.append(Explosion(self.x, self.y, radius=1))
         self.handle_explosion(walls)
 
     def handle_explosion(self, walls):
-        """폭발 범위를 처리하는 메서드"""
-        # 폭발 효과를 십자 형태로 구현
-        explosion_radius = 1  # 폭발 반경 (1칸)
-        self.destroy_walls(self.x, self.y, walls)  # 중앙 폭발
-        for i in range(1, explosion_radius + 1):
-            # 왼쪽 폭발
-            ## print("Left key pressed")
-            self.destroy_walls(self.x - i * 50, self.y, walls)
-            # 오른쪽 폭발
-            ##print("Right key pressed")
-            self.destroy_walls(self.x + i * 50, self.y, walls)
-            # 위쪽 폭발
-            ##print("Up key pressed")
-            self.destroy_walls(self.x, self.y - i * 50, walls)
-            # 아래쪽 폭발
-            ##print("Space key pressed")
-            self.destroy_walls(self.x, self.y + i * 50, walls)
-
-
-    def destroy_walls(self, x, y, walls):
-        """주어진 좌표의 벽을 파괴하는 메서드"""
-        for wall in walls:
-            if wall.x == x and wall.y == y and wall.destructible:  # 벽이 파괴 가능하면
-                walls.remove(wall)  # 벽 제거
-                print(f"Wall at ({x}, {y}) destroyed!")  # 제거된 벽 출력
+        explosion_radius = 50
+        explosion_area = pygame.Rect(self.x - explosion_radius, self.y - explosion_radius,
+                                     explosion_radius * 2 + 50, explosion_radius * 2 + 50)
+        for wall in walls[:]:
+            if explosion_area.colliderect(pygame.Rect(wall.x, wall.y, 50, 50)) and wall.destructible:
+                walls.remove(wall)
+                print(f"Wall at ({wall.x}, {wall.y}) destroyed by explosion!")
 
     def draw(self, screen):
-        # 폭탄 그리기
         screen.blit(self.image, (self.x, self.y))
-
-        # 타이머 텍스트
         if self.timer > 0:
-            timer_text = self.font.render(str(int(self.timer)), True, (255, 255, 255))  # 흰색 텍스트
-            text_rect = timer_text.get_rect(center=(self.x + 15, self.y + 15))  # 폭탄 중앙에 텍스트 위치
-            screen.blit(timer_text, text_rect)  # 화면에 타이머 텍스트 그리기
+            screen.blit(self.font.render(str(int(self.timer)), True, (255, 255, 255)),
+                        (self.x + 10, self.y + 10))
+
+class Explosion:
+    def __init__(self, x, y, radius, duration=1):
+        self.x = x
+        self.y = y
+        self.radius = radius
+        self.timer = duration
+        self.image = pygame.Surface((50, 50), pygame.SRCALPHA)
+        self.image.fill((255, 165, 0, 128))
+
+    def update(self):
+        self.timer -= 1 / 60
+
+    def draw(self, screen):
+        for i in range(self.radius + 1):
+            screen.blit(self.image, (self.x - i * 50, self.y))
+            screen.blit(self.image, (self.x + i * 50, self.y))
+            screen.blit(self.image, (self.x, self.y - i * 50))
+            screen.blit(self.image, (self.x, self.y + i * 50))
+
+    def is_finished(self):
+        return self.timer <= 0
 
 class Wall:
     def __init__(self, x, y, destructible):
         self.x = x
         self.y = y
         self.destructible = destructible
-        self.image = pygame.Surface((50, 50))  # 벽 크지조정
-        if self.destructible:
-            self.image.fill((101, 67, 33))  # 파괴 가능한 벽: 짙은 갈색
-        else:
-            self.image.fill((139, 69, 19))  # 파괴 불가능한 벽: 갈색
-
+        self.image = pygame.Surface((50, 50))
+        self.image.fill((101, 67, 33) if destructible else (139, 69, 19))
 
     def draw(self, screen):
         screen.blit(self.image, (self.x, self.y))
 
-class Item:
-    def __init__(self, x, y, type):
-        self.x = x
-        self.y = y
-        self.type = type
+# 맵 데이터 정의 (16x12 맵)
+map_data = [
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 3, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 1],
+    [1, 2, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1],
+    [1, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 1],
+    [1, 2, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1],
+    [1, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 1],
+    [1, 2, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1],
+    [1, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 1],
+    [1, 2, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1],
+    [1, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 1],
+    [1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+]
 
-    def apply_effect(self, player):
-        # 아이템 효과 적용
-        # explosion_radius = 1  # 폭발 반경 (1칸) 기본값
-        # self.speed = speed # 속도 기본값
-        # self.bombs_count = 1 # 폭탄개수 기본값
-        pass
-
-class Board:
-    def __init__(self, width, height):
-        self.width = width
-        self.height = height
-        self.grid = [[None for _ in range(width)] for _ in range(height)]
-
-    def place_element(self, element, x, y):
-        # 보드에 요소 배치
-        pass
-
-    def remove_element(self, x, y):
-        # 보드에서 요소 제거
-        pass
-
-class Explosion:
-    def __init__(self, x, y, radius):
-        self.x = x
-        self.y = y
-        self.radius = radius
-
-    def affect_elements(self):
-        # 폭발 효과 처리
-        pass
-
-class Enemy:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-
-    def move(self):
-        # 적 이동 처리
-        pass
-
-    def die(self):
-        # 적 사망 처리
-        pass
-
-# 게임 실행
-game = Game()
+game = Game(map_data=map_data, time_limit=120)
 game.start()
-game.quit()
